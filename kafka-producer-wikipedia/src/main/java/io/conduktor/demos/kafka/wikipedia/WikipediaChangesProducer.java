@@ -10,5 +10,7 @@ public class WikipediaChangesProducer {
     public static void main(String[] args) {
         logger.info("I am a kafka Producer!");
 
+
+
     }
 }
