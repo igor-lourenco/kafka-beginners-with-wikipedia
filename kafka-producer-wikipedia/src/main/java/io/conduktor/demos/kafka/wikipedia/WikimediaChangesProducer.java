@@ -61,6 +61,10 @@ public class WikimediaChangesProducer {
         acks = all -> Reconhecimento de líder + réplicas (sem perda de dados)*/
         properties.setProperty("acks", "all");
 
+        properties.setProperty(ProducerConfig.LINGER_MS_CONFIG, "20"); //Define o tempo em milissegundos que o produtor aguardará antes de enviar um lote de mensagens.
+        properties.setProperty(ProducerConfig.BATCH_SIZE_CONFIG, Integer.toString(32 * 1024)); //Define o tamanho máximo em bytes de um lote de mensagens a ser enviado pelo produtor.
+        properties.setProperty(ProducerConfig.COMPRESSION_TYPE_CONFIG, "snappy"); // Define o tipo de compressão a ser aplicado as mensagens antes do envio.
+
         return properties;
     }
 }
