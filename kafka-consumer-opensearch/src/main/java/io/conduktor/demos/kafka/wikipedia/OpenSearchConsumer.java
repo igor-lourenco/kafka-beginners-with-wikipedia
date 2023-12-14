@@ -14,6 +14,8 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.protocol.types.Field;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.opensearch.action.bulk.BulkRequest;
+import org.opensearch.action.bulk.BulkResponse;
 import org.opensearch.action.index.IndexRequest;
 import org.opensearch.action.index.IndexResponse;
 import org.opensearch.client.RequestOptions;
@@ -67,11 +69,15 @@ public class OpenSearchConsumer {
                 int recordCount = records.count();
                 logger.info("Recebido " + recordCount + " record(s)");
 
+                //envio de lote de mensagem
+                BulkRequest bulkRequest = new BulkRequest();
+
+
                 for (ConsumerRecord<String, String> record : records){
 
                     //extraímos o ID do valor JSON
                     String id = extractId(record.value());
-
+                    try {
                     //envia registro para o OpenSearch
                     IndexRequest indexRequest = new IndexRequest("wikimedia")
                             .source(record.value(), XContentType.JSON)
@@ -79,10 +85,24 @@ public class OpenSearchConsumer {
 
                     IndexResponse indexResponse = openSearchClient.index(indexRequest, RequestOptions.DEFAULT);
                     logger.info("RESPOSTA ID: " + indexResponse.getId());
-
+                    } catch (Exception e){
+                        logger.error("Erro ao enviar a mensagem: " + e.getMessage());
+                    }
 
                 }
 
+                // Se o lote de mensagem for maior que 0
+                if (bulkRequest.numberOfActions() > 0){
+                    BulkResponse bulkResponse = openSearchClient.bulk(bulkRequest, RequestOptions.DEFAULT);
+                    logger.info("Inserted " + bulkResponse.getItems().length + " record(s).");
+
+                    try {
+                        Thread.sleep(10000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+
+                }
             }
 
         }
@@ -132,6 +152,7 @@ public class OpenSearchConsumer {
         properties.setProperty(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         properties.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+        properties.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         properties.setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
 
         // create consumer
@@ -140,11 +161,17 @@ public class OpenSearchConsumer {
 
     private static String extractId(String json){
         // gson library
+
+        try{
         return JsonParser.parseString(json)
                 .getAsJsonObject()
                 .get("meta")
                 .getAsJsonObject()
                 .get("id")
                 .getAsString();
+        }catch (Exception e){
+            logger.error("Erro ao formatar a mensagem: " + e.getMessage());
+            return "";
+        }
     }
 }
