@@ -12,7 +12,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.common.protocol.types.Field;
+import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.bulk.BulkResponse;
@@ -45,6 +45,24 @@ public class OpenSearchConsumer {
 
         //cria nosso cliente kafka
         KafkaConsumer<String, String> consumer = createKafkaConsumer();
+
+        // obter uma referência ao tópico principal
+        final Thread mainThread = Thread.currentThread();
+
+        // adding the shutdown hook
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            public void run() {
+                logger.info("Detectado um desligamento, vamos sair chamando consumer.wakeup()...");
+                consumer.wakeup();
+
+                // junta ao thread principal para permitir a execução do código na thread principal
+                try {
+                    mainThread.join();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
 
         //precisamos criar o índice no OpenSearch se ele ainda não existir
         try(openSearchClient; consumer){
@@ -83,8 +101,9 @@ public class OpenSearchConsumer {
                             .source(record.value(), XContentType.JSON)
                             .id(id);
 
-                    IndexResponse indexResponse = openSearchClient.index(indexRequest, RequestOptions.DEFAULT);
-                    logger.info("RESPOSTA ID: " + indexResponse.getId());
+//                    IndexResponse indexResponse = openSearchClient.index(indexRequest, RequestOptions.DEFAULT);
+                        bulkRequest.add(indexRequest);
+//                    logger.info("RESPOSTA ID: " + indexResponse.getId());
                     } catch (Exception e){
                         logger.error("Erro ao enviar a mensagem: " + e.getMessage());
                     }
@@ -105,8 +124,15 @@ public class OpenSearchConsumer {
                 }
             }
 
+        } catch (WakeupException e) {
+            logger.info("O consumidor está começando a desligar");
+        } catch (Exception e) {
+            logger.error("Exceção inesperada no consumidorUnexpected exception in the consumer", e);
+        } finally {
+            consumer.close(); // fechar o consumidor, isso também irá comprometer compensações
+            openSearchClient.close();
+            logger.info("O consumidor agora está normalmente desligado");
         }
-
     }
 
     public static RestHighLevelClient createOpenSearchClient() {
@@ -135,7 +161,6 @@ public class OpenSearchConsumer {
                             .setHttpClientConfigCallback(
                                     httpAsyncClientBuilder -> httpAsyncClientBuilder.setDefaultCredentialsProvider(cp)
                                             .setKeepAliveStrategy(new DefaultConnectionKeepAliveStrategy())));
-
 
         }
         return restHighLevelClient;
