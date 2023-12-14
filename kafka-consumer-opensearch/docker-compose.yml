@@ -5,13 +5,13 @@ services:
     image: opensearchproject/opensearch:1.2.4
     environment:
       discovery.type: single-node
-      plugins.security.disable: true  # Desabilita https e logins
-      compatibility.override_main_response_version: true
+      plugins.security.disabled: "true" # disable https and logins
+      compatibility.override_main_response_version: "true"
     ports:
       - 9200:9200
-      - 9600:9600  # Necessário para analisador de desempenho
+      - 9600:9600 # required for Performance Analyzer
 
-  # http://localhost:5601/app/dev_tools#/console
+  # console at http://localhost:5601/app/dev_tools#/console
   opensearch-dashboards:
     image: opensearchproject/opensearch-dashboards:1.2.0
     ports:
@@ -19,3 +19,4 @@ services:
     environment:
       OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
       DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+
